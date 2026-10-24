@@ -62,6 +62,7 @@ jobs:
       - name: Clone Armbian Build Framework
         run: |
           git clone --depth=1 https://github.com/armbian/build.git armbian-build
+          mkdir -p armbian-build/userpatches
           cp -rv userpatches/* armbian-build/userpatches/
 
       - name: Compile Armbian Image (with U-Boot + Vendor 6.1 Kernel + R66 DTB)
