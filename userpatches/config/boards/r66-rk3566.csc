@@ -13,6 +13,8 @@ BOOT_LOGO="desktop"
 BOOT_FDT_FILE="rockchip/rk3566-r66.dtb"
 BOOT_SCENARIO="spl-blobs"
 IMAGE_PARTITION_TABLE="gpt"
+BOOTFS_TYPE="ext4"
+BOOTSIZE="512"
 
 # Package mainline U-Boot + Rockchip DDR4/BL31 blobs directly into the SD card image (sector 64 / 32KB offset)
 function post_family_config__r66_use_mainline_uboot() {
@@ -33,12 +35,16 @@ function post_family_config__r66_use_mainline_uboot() {
 	}
 }
 
-# Ensure U-Boot checks SD card (mmc1) before onboard eMMC (mmc0)
+# Ensure U-Boot checks SD card (mmc1) before onboard eMMC (mmc0) and keeps SD card at 3.3V High-Speed
 function pre_config_uboot_target__r66_patch_boot_order() {
 	declare -a rockchip_uboot_targets=("mmc1" "usb" "mmc0" "pxe" "dhcp")
 	display_alert "u-boot for ${BOARD}/${BRANCH}" "u-boot: adjust boot order to '${rockchip_uboot_targets[*]}'" "info"
 	if [[ -f include/configs/rockchip-common.h ]]; then
 		sed -i -e "s/#define BOOT_TARGETS.*/#define BOOT_TARGETS \"${rockchip_uboot_targets[*]}\"/" include/configs/rockchip-common.h
+	fi
+	# Remove sd-uhs-sdr* from U-Boot's rk3566-quartz64-a.dts so U-Boot keeps TF card in 3.3V mode matching R66 hardware
+	if [[ -f dts/upstream/src/arm64/rockchip/rk3566-quartz64-a.dts ]]; then
+		sed -i -e '/sd-uhs-sdr/d' dts/upstream/src/arm64/rockchip/rk3566-quartz64-a.dts
 	fi
 }
 
