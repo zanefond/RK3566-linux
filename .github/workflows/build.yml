@@ -39,7 +39,7 @@ permissions:
 jobs:
   build-armbian:
     name: Build Armbian (${{ inputs.release || 'bookworm' }})
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 300
 
     steps:
@@ -57,6 +57,7 @@ jobs:
             /usr/local/share/boost \
             /usr/local/graalvm
           sudo docker image prune --all --force || true
+          sudo ls -la /proc/sys/fs/binfmt_misc >/dev/null 2>&1 || true
           df -h
 
       - name: Clone Armbian Build Framework
