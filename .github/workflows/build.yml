@@ -1,0 +1,103 @@
+name: Build Armbian for R66 (RK3566)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: '发行版版本 (bookworm = Debian 12, noble = Ubuntu 24.04)'
+        required: true
+        default: 'bookworm'
+        type: choice
+        options:
+          - bookworm
+          - noble
+      build_minimal:
+        description: '精简版系统 (no = 标准服务器 CLI 版, yes = 极简 Minimal 版)'
+        required: true
+        default: 'no'
+        type: choice
+        options:
+          - 'no'
+          - 'yes'
+      build_desktop:
+        description: '是否构建桌面环境 (no = 服务器版, yes = 桌面版)'
+        required: true
+        default: 'no'
+        type: choice
+        options:
+          - 'no'
+          - 'yes'
+      create_release:
+        description: '编译完成后自动发布到 GitHub Releases'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  build-armbian:
+    name: Build Armbian (${{ inputs.release || 'bookworm' }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+
+    steps:
+      - name: Checkout R66 Configuration Repository
+        uses: actions/checkout@v4
+
+      - name: Free Runner Disk Space
+        run: |
+          df -h
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /opt/hostedtoolcache/CodeQL \
+            /usr/local/share/boost \
+            /usr/local/graalvm
+          sudo docker image prune --all --force || true
+          df -h
+
+      - name: Clone Armbian Build Framework
+        run: |
+          git clone --depth=1 https://github.com/armbian/build.git armbian-build
+          cp -rv userpatches/* armbian-build/userpatches/
+
+      - name: Compile Armbian Image (with U-Boot + Vendor 6.1 Kernel + R66 DTB)
+        working-directory: armbian-build
+        run: |
+          ./compile.sh \
+            BOARD=r66-rk3566 \
+            BRANCH=vendor \
+            RELEASE=${{ inputs.release || 'bookworm' }} \
+            BUILD_MINIMAL=${{ inputs.build_minimal || 'no' }} \
+            BUILD_DESKTOP=${{ inputs.build_desktop || 'no' }} \
+            KERNEL_CONFIGURE=no \
+            COMPRESS_OUTPUTIMAGE="sha,img,xz" \
+            SHARE_LOG=no
+
+      - name: Collect Image and Deb Packages
+        run: |
+          mkdir -p dist
+          cp -v armbian-build/output/images/*.img.xz* dist/
+          find armbian-build/output/debs -name "*.deb" -exec cp -v {} dist/ \; || true
+          ls -lh dist/
+
+      - name: Upload Armbian Image Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Armbian-R66-RK3566-${{ inputs.release || 'bookworm' }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish to GitHub Releases
+        if: ${{ inputs.create_release == true }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v$(date +%Y.%m.%d)-${{ inputs.release || 'bookworm' }}-${{ github.run_number }}"
+          gh release create "$TAG" dist/* \
+            --title "Armbian R66 RK3566 (${{ inputs.release || 'bookworm' }}) - Build #${{ github.run_number }}" \
+            --notes "Automated Armbian Vendor 6.1 build for R66 (RK3566 DDR4) with U-Boot pre-packaged for SD card boot, HDMI output, PCIe RTL8111 GbE, RTL8821CS WiFi/BT, and Rockchip MPP hardware video decoding."

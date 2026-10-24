@@ -1,0 +1,6 @@
+.DS_Store
+*.JPG
+*.jpg
+*.png
+armbian-build/
+dist/
